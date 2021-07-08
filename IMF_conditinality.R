@@ -1,3 +1,5 @@
+library(countrycode)
+
 url <- "https://www.imf.org/external/np/pdr/mona/ArrangementsData/Combined.xlsx"
 mona <- rio::import(file = url,which = 1) %>% 
   glimpse()
@@ -82,3 +84,5 @@ covid19_2020 <- covid19[covid19$year == "2020",]
 covid19_2021 <- covid19[covid19$year == "2021",]
 
 covid19_2021 <- covid19_2021 %>% filter(weeknum != 53)
+
+
