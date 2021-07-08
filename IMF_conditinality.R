@@ -12,13 +12,21 @@ mona$`ISO3N` <- temp2
 
 mona.clean <- mona %>% dplyr::select(`Arrangement Number`, ISO3N, `Key Code`, `Economic Code`, `Approval Year`, `Initial End Year`)
 
-for (i in 2000:2021){
+for (i in 2010:2021){
   j <- i%>% as.character()
   mona.clean$j <- 0
   mona.clean$j[mona.clean$`Approval Year` <= i & i <= mona.clean$`Initial End Year`] <- 1
   colnames(mona.clean)[colnames(mona.clean)%>%length()] <- j
 }
 
+length <- mona.clean %>% colnames() %>% length()
+
+temp <- mona.clean[,7:length]
+
+mona.clean$sum <- rowSums(temp) %>% as.data.frame()
+
+mona.clean.10year <- mona.clean %>% filter(sum != 0) %>% .[,-c(5:length)]
+  
 mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Initial End Year`))
 
 mona.clean <- mona.clean %>% 
@@ -41,6 +49,19 @@ mona.clean.economic <- mona.clean %>%
   group_by(ISO3N, year, `Economic Code`)%>%
   summarize(condition_num = n())
 mona.clean.economic$`Economic Code` <- mona.clean.economic$`Economic Code` %>% as.character()
+
+mona.clean.10year.num <- mona.clean.10year %>%
+  dplyr::select(!c(`Arrangement Number`, `Key Code`, `Economic Code`)) %>%
+  group_by(ISO3N)%>%
+  summarize(condition_num = sum(sum))
+
+mona.clean.10year.key <- mona.clean.10year %>%
+  group_by(ISO3N, `Key Code`)%>%
+  summarize(Key_num = sum(sum))
+
+mona.clean.10year.economic <- mona.clean.10year %>%
+  group_by(ISO3N, `Economic Code`)%>%
+  summarize(Economic_num = sum(sum))
 
 mona.clean.num %>% filter(ISO3N == 32) %>%
   ggplot(aes(x=year, y=condition_num)) +
@@ -71,18 +92,29 @@ covid19.foriegn$year <- format(as.Date(covid19.foriegn$date, '%Y-%m-%d'), "%Y")
 
 covid19.foriegn$weeknum <-  format(covid19.foriegn$date, format = "%V")
 
-covid19.foriegn.summarize <- dplyr::select(covid19.foriegn, -c(iso_code, date, continent,tests_units))
+date.yesterday <- Sys.Date() - 1
 
-covid19.foriegn.summarize.sum <- covid19.foriegn.summarize %>% group_by(location, weeknum, year) %>% summarise_all(list(sum), na.rm = TRUE)
+covid19.foriegn <- covid19.foriegn %>% filter(date == date.yesterday)
 
-temp.name <- covid19.foriegn[,c("iso_code", "continent","location")] %>% unique()
+covid19.foriegn.death <- covid19.foriegn %>% dplyr::select(c("iso_code", "total_deaths_per_million", 
+                                                             "population_density", "gdp_per_capita", "life_expectancy"))
 
-covid19 <- left_join(covid19.foriegn.summarize.sum, temp.name)
+covid19.foriegn.death$ISO3N <- covid19.foriegn.death$iso_code %>% countrycode(., origin = 'iso3c', destination = 'iso3n')
+covid19.foriegn.death$ln.gdp <- log(covid19.foriegn.death$gdp_per_capita)
 
-covid19_2020 <- covid19[covid19$year == "2020",]
+covid19.foriegn.death <- drop_na(covid19.foriegn.death)
 
-covid19_2021 <- covid19[covid19$year == "2021",]
+final <- left_join(covid19.foriegn.death, mona.clean.10year.num)
+# final <- left_join(final, mona.clean.10year.economic)
+# final <- left_join(final, mona.clean.10year.key)
 
-covid19_2021 <- covid19_2021 %>% filter(weeknum != 53)
 
+final[final %>% is.na()] <- 0
+
+final.fake <- final %>% filter(condition_num != 0)
+
+l1 <- final %>% lm(formula = total_deaths_per_million ~ condition_num + population_density + gdp_per_capita + life_expectancy )
+
+library(stargazer)
+stargazer(l1, type="text", title="Results", align=TRUE)
 
