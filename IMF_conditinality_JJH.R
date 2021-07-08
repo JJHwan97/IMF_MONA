@@ -30,6 +30,7 @@ mona.clean.10year <- mona.clean %>% filter(sum != 0) %>% .[,-c(5:length)]
 mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Initial End Year`))
 
 mona.clean <- mona.clean %>% 
+  dplyr::select(!c(`sum`)) %>%
   pivot_longer(!c("Arrangement Number","ISO3N","Key Code","Economic Code"), names_to = "year", values_to = "under") %>%
   filter(under != 0)
 
@@ -113,8 +114,10 @@ final[final %>% is.na()] <- 0
 
 final.fake <- final %>% filter(condition_num != 0)
 
-l1 <- final %>% lm(formula = total_deaths_per_million ~ condition_num + population_density + gdp_per_capita + life_expectancy )
+l1 <- final.fake %>% lm(formula = total_deaths_per_million ~ condition_num)
+l2 <- final.fake %>% lm(formula = total_deaths_per_million ~ condition_num + ln.gdp)
+l3 <- final.fake %>% lm(formula = total_deaths_per_million ~ condition_num + population_density + ln.gdp + life_expectancy )
 
 library(stargazer)
-stargazer(l1, type="text", title="Results", align=TRUE)
+stargazer(l1, l2, l3, type="text", title="Results", align=TRUE)
 
