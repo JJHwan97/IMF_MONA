@@ -129,7 +129,7 @@ covid19.foriegn$year <- format(as.Date(covid19.foriegn$date, '%Y-%m-%d'), "%Y")
 
 covid19.foriegn$weeknum <-  format(covid19.foriegn$date, format = "%V")
 
-date.yesterday <- Sys.Date() - 1
+date.yesterday <- Sys.Date() - 2
 
 covid19.foriegn <- covid19.foriegn %>% filter(date == date.yesterday)
 
@@ -158,6 +158,9 @@ dem5 <- rio::import(file = url,which = 1) %>%
 dem5 <- dem5 %>% dplyr::select(ccode, year, polity)
 dem5$ISO3N <- dem5$ccode %>% countrycode(., origin = 'p4n', destination = 'iso3n')
 dem5.2018 <- dem5 %>% filter(year == 2018)
+dem5.2018 <- dem5.2018[,c(4,3)]
+
+dem5.2018 <- dem5.2018 %>% dplyr::filter(polity > -10.5)
 
 library(wbstats)
 urban <- wb_data("sp.urb.totl.in.zs")
@@ -166,15 +169,46 @@ urban$ISO3N <- urban$iso3c %>% countrycode(.,origin = "iso3c", destination = "is
 urban <- urban[,c("ISO3N","SP.URB.TOTL.IN.ZS")]
 colnames(urban)[2]<-"urban_pop"
 
+oil <- wb_data("NY.GDP.PETR.RT.ZS")
+oil <- oil %>% filter(date == 2019)
+oil$ISO3N <- oil$iso3c %>% countrycode(.,origin = "iso3c", destination = "iso3n")
+oil <- oil[,c("ISO3N","NY.GDP.PETR.RT.ZS")]
+colnames(oil)[2]<-"oil"
+
+library(vdemdata)
+vdem.data <- vdem
+vdem.data <- vdem.data %>% filter(year == 2020)
+
+vdem.data <- vdem.data %>% dplyr::select(year, country_id, v2x_egaldem)
+
+vdem.data$ISO3N <- vdem.data$country_id %>% countrycode(.,origin = "vdem", destination = "iso3n")
+
+vdem.data <- vdem.data[,c("ISO3N", "v2x_egaldem")]
+
+colnames(vdem.data)[2]<-"egaldem"
+
+gov.policy <- read.csv(url("https://github.com/OxCGRT/covid-policy-tracker/raw/master/data/OxCGRT_latest.csv"))
+
+gov.policy <- gov.policy %>% dplyr::select(CountryCode, Date, H2_Testing.policy)
+
+yesterday <- (Sys.Date() -1) %>% as.character()
+yesterday <- paste0(substr(yesterday,1,4), substr(yesterday,6,7), substr(yesterday,9,10))
+
+gov.policy$Date <- gov.policy$Date %>% as.character()
+gov.policy <- gov.policy %>% filter(Date == yesterday)
 
 covid19.foriegn.death <- drop_na(covid19.foriegn.death)
 final <- left_join(covid19.foriegn.death, mona.clean.num.conditionality)
 final <- left_join(final, mona.clean.num.programs)
 final <- left_join(final, mona.clean.under.year)
+final <- left_join(final, vdem.data)
+final <- left_join(final, oil)
 final[is.na(final)] <- 0
 
 final <- left_join(final, dem5.2018)
 final <- left_join(final, urban)
+
+final <- final %>% drop_na()
 
 l.conditionality.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
                            `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
@@ -226,4 +260,27 @@ l.time.dc <- final %>% lm(formula = `deathofcase` ~
 
 
 stargazer(l.conditionality.dc, l.program.dc, l.SB.dc, l.SPC.dc, l.SAC.dc, l.total.dc, l.time.dc, type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result_doverc.htm", align=TRUE)
+
+final$imf <- 0
+final$imf[final$time != 0] <- 1
+
+m.out <- matchit(`imf` ~ `ln.gdp` + `polity`, data = final,
+                  method = NULL, distance = "glm")
+summary(m.out)
+plot(m.out, type = "jitter", interactive = FALSE)
+
+plot(m.out, type = "qq", interactive = FALSE,
+     which.xs = c("ln.gdp"))
+
+plot(summary(m.out))
+
+z.out <- zelig(`total_deaths_per_million` ~  `imf`,
+               model = "ls", data = m.out)
+
+fit2 <- lm(`total_deaths_per_million` ~ 
+             `imf` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + 
+             Europe + Africa + `North America` + `South America` + Oceania
+           , data = m.out, weights = weights)
+
+
 
