@@ -10,7 +10,7 @@ temp2[temp1 == 965] <- 890
 
 mona$`ISO3N` <- temp2
 
-mona.clean <- mona %>% dplyr::select(`Arrangement Number`, ISO3N, `Key Code`, `Economic Code`, `Approval Year`, `Initial End Year`)
+mona.clean <- mona %>% dplyr::select(`Arrangement Number`, ISO3N, `Arrangement Type`, `Economic Code`, `Approval Year`, `Initial End Year`)
 
 for (i in 2010:2021){
   j <- i%>% as.character()
@@ -40,17 +40,19 @@ mona.clean.num.conditionality <- mona.clean.num.conditionality%>%
                                 drop_na()
 
 mona.clean.num.programs <- mona.clean.10year %>% 
-  group_by(ISO3N, `Arrangement Number`, `Key Code`)%>%
-  summarize(condition_num = sum(sum)) %>% 
-  group_by(ISO3N, `Key Code`) %>%
-  summarize(final_sum = sum(condition_num)) %>%
-  drop_na() %>%
-  pivot_wider(names_from = `Key Code`, values_from = `final_sum`, values_fill = 0)
+  dplyr::select(ISO3N, `Arrangement Number`, `Arrangement Type`, c(2011:2021)%>% as.character()) %>% unique() %>%
+  group_by(ISO3N, `Arrangement Type`, `Arrangement Number`)%>%
+  summarize(count = n()) %>%
+  group_by(ISO3N,`Arrangement Type`)%>%
+  summarize(program_count = n())
 
-mona.clean.num.programs$totalprogram <- rowSums(mona.clean.num.programs[,2:5])
+mona.clean.num.programs <- pivot_wider(mona.clean.num.programs, names_from = `Arrangement Type`, values_from = `program_count`, values_fill =0)
+mona.clean.num.programs$totalprogram <- rowSums(mona.clean.num.programs[,2:length(colnames(mona.clean.num.programs))])
+
+mona.clean.num.programs <- mona.clean.num.programs %>% filter(totalprogram != 0) %>% drop_na()
 
 mona.clean.under.year <- mona.clean.10year %>% 
-  dplyr::select(!c(`Arrangement Number`, `Key Code`, `Economic Code`, `Approval Year`, `Initial End Year`,sum)) %>%
+  dplyr::select(!c(`Arrangement Number`, `Arrangement Type`, `Economic Code`, `Approval Year`, `Initial End Year`,sum)) %>%
   group_by(ISO3N)%>%
   summarise(across(everything(), sum))
 
@@ -65,19 +67,19 @@ colnames(mona.clean.under.year)[1]<-"ISO3N"
 # 
 # mona.clean <- mona.clean %>% 
 #   dplyr::select(!c(`sum`)) %>%
-#   pivot_longer(!c("Arrangement Number","ISO3N","Key Code","Economic Code"), names_to = "year", values_to = "under") %>%
+#   pivot_longer(!c("Arrangement Number","ISO3N","Arrangement Type","Economic Code"), names_to = "year", values_to = "under") %>%
 #   filter(under != 0)
 # 
 # mona.clean$year <- mona.clean$year %>% as.numeric()
 # 
 # mona.clean.num <- mona.clean %>%
-#   dplyr::select(!c(`Arrangement Number`, `Key Code`, `Economic Code`)) %>%
+#   dplyr::select(!c(`Arrangement Number`, `Arrangement Type`, `Economic Code`)) %>%
 #   group_by(ISO3N, year)%>%
 #   summarize(condition_num = n())
 # mona.clean.num$condition_num <- mona.clean.num$condition_num %>% as.numeric()
 # 
 # mona.clean.key <- mona.clean %>%
-#   group_by(ISO3N, year, `Key Code`)%>%
+#   group_by(ISO3N, year, `Arrangement Type`)%>%
 #   summarize(condition_num = n())
 # 
 # mona.clean.economic <- mona.clean %>%
@@ -86,15 +88,15 @@ colnames(mona.clean.under.year)[1]<-"ISO3N"
 # mona.clean.economic$`Economic Code` <- mona.clean.economic$`Economic Code` %>% as.character()
 # 
 # mona.clean.10year.num <- mona.clean.10year %>%
-#   dplyr::select(!c(`Arrangement Number`, `Key Code`, `Economic Code`)) %>%
+#   dplyr::select(!c(`Arrangement Number`, `Arrangement Type`, `Economic Code`)) %>%
 #   group_by(ISO3N)%>%
 #   summarize(condition_num = sum(sum))
 # 
 # mona.clean.10year.key <- mona.clean.10year %>%
-#   group_by(ISO3N, `Key Code`)%>%
+#   group_by(ISO3N, `Arrangement Type`)%>%
 #   summarize(Key_num = sum(sum))
 # 
-# mona.clean.10year.key <- mona.clean.10year.key %>% pivot_wider(names_from = `Key Code`, values_from = `Key_num`, values_fill = 0)
+# mona.clean.10year.key <- mona.clean.10year.key %>% pivot_wider(names_from = `Arrangement Type`, values_from = `Key_num`, values_fill = 0)
 # 
 # mona.clean.10year.economic <- mona.clean.10year %>%
 #   group_by(ISO3N, `Economic Code`)%>%
@@ -108,7 +110,7 @@ colnames(mona.clean.under.year)[1]<-"ISO3N"
 #   theme_jhp()
 # 
 # mona.clean.key %>% filter(ISO3N == 32) %>%
-#   ggplot(aes(x=year, y=condition_num, group = `Key Code`, colour = `Key Code`)) +
+#   ggplot(aes(x=year, y=condition_num, group = `Arrangement Type`, colour = `Arrangement Type`)) +
 #   geom_line() +
 #   expand_limits(y = 0) +
 #   labs(xlab = "Year", ylab = "Economic conditionality Number", title = "Argentina") +
@@ -129,7 +131,7 @@ covid19.foriegn$year <- format(as.Date(covid19.foriegn$date, '%Y-%m-%d'), "%Y")
 
 covid19.foriegn$weeknum <-  format(covid19.foriegn$date, format = "%V")
 
-date.yesterday <- Sys.Date() - 2
+date.yesterday <- "2020-12-31"
 
 covid19.foriegn <- covid19.foriegn %>% filter(date == date.yesterday)
 
@@ -141,6 +143,8 @@ covid19.foriegn.death$deathofcase <- covid19.foriegn$total_deaths_per_million/co
 
 covid19.foriegn.death$ISO3N <- covid19.foriegn.death$iso_code %>% countrycode(., origin = 'iso3c', destination = 'iso3n')
 covid19.foriegn.death$ln.gdp <- log(covid19.foriegn.death$gdp_per_capita)
+
+covid19.foriegn.death$l.total_deaths_per_million <- log(covid19.foriegn.death$total_deaths_per_million)
 
 covid19.foriegn.death <- drop_na(covid19.foriegn.death)
 
@@ -163,16 +167,20 @@ dem5.2018 <- dem5.2018[,c(4,3)]
 dem5.2018 <- dem5.2018 %>% dplyr::filter(polity > -10.5)
 
 library(wbstats)
-urban <- wb_data("sp.urb.totl.in.zs")
-urban <- urban %>% filter(date == 2020)
-urban$ISO3N <- urban$iso3c %>% countrycode(.,origin = "iso3c", destination = "iso3n")
-urban <- urban[,c("ISO3N","SP.URB.TOTL.IN.ZS")]
+library(WDI)
+# urban <- wb_data("sp.urb.totl.in.zs")
+urban <- WDI(indicator="sp.urb.totl.in.zs", start = 2020, end=2020)
+urban <- urban[3:nrow(urban),]
+# urban <- urban %>% filter(date == 2020)
+urban$ISO3N <- urban$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
+urban <- urban[,c("ISO3N","sp.urb.totl.in.zs")] %>% drop_na()
 colnames(urban)[2]<-"urban_pop"
 
 oil <- wb_data("NY.GDP.PETR.RT.ZS")
-oil <- oil %>% filter(date == 2019)
-oil$ISO3N <- oil$iso3c %>% countrycode(.,origin = "iso3c", destination = "iso3n")
-oil <- oil[,c("ISO3N","NY.GDP.PETR.RT.ZS")]
+# oil <- oil %>% filter(date == 2019)
+oil <-WDI(indicator="NY.GDP.PETR.RT.ZS", start = 2019, end=2019)
+oil$ISO3N <- oil$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
+oil <- oil[,c("ISO3N","NY.GDP.PETR.RT.ZS")] %>% drop_na()
 colnames(oil)[2]<-"oil"
 
 library(vdemdata)
@@ -210,30 +218,21 @@ final <- left_join(final, urban)
 
 final <- final %>% drop_na()
 
-l.conditionality.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                           `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+region <- c(Asia + Europe + Africa + `North America` + `South America` + Oceania)
 
-l.program.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                           `PA` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.SB.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                           `SB` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.SPC.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                           `SPC` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.SAC.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                           `SAC` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.total.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                              `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.time.death <- final %>% lm(formula = `total_deaths_per_million` ~ 
-                           `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-library(stargazer)
-
-stargazer(l.conditionality.death, l.program.death,l.SB.death,l.SPC.death,l.SAC.death,l.total.death,l.time.death, type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result.htm", align=TRUE)
+  l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+                             `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `oil` + `egaldem`)
+  
+  l.program.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+                             `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `oil` + `egaldem`
+                              + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+  
+  l.time.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+                             `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+  
+  library(stargazer)
+  
+  stargazer(l.conditionality.death, l.program.death, l.time.death, type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result.htm", align=TRUE)
 
 ###
 
