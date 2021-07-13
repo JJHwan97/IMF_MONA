@@ -1,4 +1,6 @@
 library(countrycode)
+library(tidyr)
+library(dplyr)
 
 url <- "https://www.imf.org/external/np/pdr/mona/ArrangementsData/Combined.xlsx"
 mona <- rio::import(file = url,which = 1) %>% 
@@ -63,6 +65,17 @@ time <- rowSums(time)
 mona.clean.under.year <- cbind(mona.clean.under.year$ISO3N,time) %>% as.data.frame()
 colnames(mona.clean.under.year)[1]<-"ISO3N"
 
+mona.clean.lastyear <- mona.clean.10year %>%
+  filter(`2020` == 1) %>%
+  dplyr::select(`Arrangement Number`, `ISO3N`, `Arrangement Type`, `2020`)%>%
+  unique() %>% 
+  group_by(ISO3N, `Arrangement Type`) %>%
+  summarize(program_number = n())
+
+mona.clean.lastyear <-mona.clean.lastyear %>% filter(`Arrangement Type` != "PCI")
+
+mona.clean.lastyear[,3] <- 1
+mona.clean.lastyear <- mona.clean.lastyear[,c(1,3)]
 # mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Initial End Year`))
 # 
 # mona.clean <- mona.clean %>% 
@@ -213,6 +226,7 @@ final <- left_join(final, mona.clean.num.programs)
 final <- left_join(final, mona.clean.under.year)
 final <- left_join(final, vdem.data)
 final <- left_join(final, oil)
+final <- left_join(final, mona.clean.lastyear)
 final[is.na(final)] <- 0
 
 final <- left_join(final, dem5.2018)
@@ -231,10 +245,13 @@ final <- final %>% drop_na()
   l.time.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
                              `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                              + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+  l.lastyear <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+                                 `final_sum`*program_number + final_sum + `program_number` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                               + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   library(stargazer)
   
-  stargazer(l.conditionality.death, l.program.death, l.time.death, type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result.htm", align=TRUE)
+  stargazer(l.conditionality.death, l.program.death, l.time.death,l.lastyear,  type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result.htm", align=TRUE)
 
 ###
 
