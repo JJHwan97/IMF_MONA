@@ -145,6 +145,7 @@ covid19.foriegn.death$ISO3N <- covid19.foriegn.death$iso_code %>% countrycode(.,
 covid19.foriegn.death$ln.gdp <- log(covid19.foriegn.death$gdp_per_capita)
 
 covid19.foriegn.death$l.total_deaths_per_million <- log(covid19.foriegn.death$total_deaths_per_million)
+covid19.foriegn.death$l.population_density <- log(covid19.foriegn.death$population_density)
 
 covid19.foriegn.death <- drop_na(covid19.foriegn.death)
 
@@ -176,12 +177,13 @@ urban$ISO3N <- urban$iso2c %>% countrycode(.,origin = "iso2c", destination = "is
 urban <- urban[,c("ISO3N","sp.urb.totl.in.zs")] %>% drop_na()
 colnames(urban)[2]<-"urban_pop"
 
-oil <- wb_data("NY.GDP.PETR.RT.ZS")
+# oil <- wb_data("NY.GDP.PETR.RT.ZS")
 # oil <- oil %>% filter(date == 2019)
 oil <-WDI(indicator="NY.GDP.PETR.RT.ZS", start = 2019, end=2019)
 oil$ISO3N <- oil$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
 oil <- oil[,c("ISO3N","NY.GDP.PETR.RT.ZS")] %>% drop_na()
-colnames(oil)[2]<-"oil"
+oil[,2] <- log(oil[,2]+1)
+colnames(oil)[2]<-"l.oil"
 
 library(vdemdata)
 vdem.data <- vdem
@@ -218,17 +220,17 @@ final <- left_join(final, urban)
 
 final <- final %>% drop_na()
 
-region <- c(Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
   l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                             `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `oil` + `egaldem`)
+                             `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                             + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   l.program.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                             `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `oil` + `egaldem`
+                             `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                               + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   l.time.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                             `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+                             `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                             + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   library(stargazer)
   
@@ -237,35 +239,30 @@ region <- c(Asia + Europe + Africa + `North America` + `South America` + Oceania
 ###
 
 l.conditionality.dc <- final %>% lm(formula = `deathofcase` ~ 
-                                         `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.program.dc <- final %>% lm(formula = `deathofcase` ~ 
-                                  `PA` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.SB.dc <- final %>% lm(formula = `deathofcase` ~ 
-                             `SB` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.SPC.dc <- final %>% lm(formula = `deathofcase` ~ 
-                              `SPC` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-
-l.SAC.dc <- final %>% lm(formula = `deathofcase` ~ 
-                              `SAC` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+                                         `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                                    + Asia + Europe + Africa + `North America` + `South America` + Oceania)
 
 l.total.dc <- final %>% lm(formula = `deathofcase` ~ 
-                                `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+                                `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                           + Asia + Europe + Africa + `North America` + `South America` + Oceania)
 
 l.time.dc <- final %>% lm(formula = `deathofcase` ~ 
-                               `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+                               `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                          + Asia + Europe + Africa + `North America` + `South America` + Oceania)
 
 
-stargazer(l.conditionality.dc, l.program.dc, l.SB.dc, l.SPC.dc, l.SAC.dc, l.total.dc, l.time.dc, type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result_doverc.htm", align=TRUE)
+stargazer(l.conditionality.dc, l.total.dc, l.time.dc, type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result_doverc.htm", align=TRUE)
 
 final$imf <- 0
 final$imf[final$time != 0] <- 1
 
+library(Zelig)
+library(MatchIt)
+
 m.out <- matchit(`imf` ~ `ln.gdp` + `polity`, data = final,
-                  method = NULL, distance = "glm")
+                  method = "optimal", distance = "glm")
 summary(m.out)
+
 plot(m.out, type = "jitter", interactive = FALSE)
 
 plot(m.out, type = "qq", interactive = FALSE,
@@ -273,13 +270,16 @@ plot(m.out, type = "qq", interactive = FALSE,
 
 plot(summary(m.out))
 
-z.out <- zelig(`total_deaths_per_million` ~  `imf`,
+z.out <- zelig(`total_deaths_per_million` ~  `imf` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+               + Asia + Europe + Africa + `North America` + `South America`,
                model = "ls", data = m.out)
 
-fit2 <- lm(`total_deaths_per_million` ~ 
-             `imf` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + Asia + 
-             Europe + Africa + `North America` + `South America` + Oceania
-           , data = m.out, weights = weights)
+z5_1 <- setx(z.out, `imf` = 0)
+z5_1 <- setx1(z.out, `imf` = 1)
 
+summary(z5_1)
 
+z5_1 <- sim(z5_1)
+
+plot(z5_1)
 
