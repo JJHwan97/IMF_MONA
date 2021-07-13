@@ -76,6 +76,15 @@ mona.clean.lastyear <-mona.clean.lastyear %>% filter(`Arrangement Type` != "PCI"
 
 mona.clean.lastyear[,3] <- 1
 mona.clean.lastyear <- mona.clean.lastyear[,c(1,3)]
+
+mona.clean.lastyear.condition <- mona.clean.10year %>%
+  filter(`2020` == 1) %>%
+  dplyr::select(`Arrangement Number`, `ISO3N`, `Economic Code`,`2020`)%>%
+  group_by(ISO3N, `Arrangement Number`,`Economic Code`) %>%
+  summarize(condition_number = n()) %>%
+  group_by(ISO3N)%>%
+  summarize(condition_number = sum(condition_number))
+
 # mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Initial End Year`))
 # 
 # mona.clean <- mona.clean %>% 
@@ -198,6 +207,33 @@ oil <- oil[,c("ISO3N","NY.GDP.PETR.RT.ZS")] %>% drop_na()
 oil[,2] <- log(oil[,2]+1)
 colnames(oil)[2]<-"l.oil"
 
+#get interest
+interest <-WDI(indicator="FR.INR.RINR", start = 2019, end=2020)
+interest$ISO3N <- interest$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
+interest <- interest[,c("year","ISO3N","FR.INR.RINR")] %>% drop_na()
+interest <- interest %>% filter(ISO3N == 840)
+interest.value <- interest[1,3] - interest[2,3]
+
+# Trade
+trade <-WDI(indicator="NE.TRD.GNFS.ZS", start = 2019, end=2019)
+trade$ISO3N <- trade$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
+trade <- trade[,c("ISO3N","NE.TRD.GNFS.ZS")] %>% drop_na()
+colnames(trade)[2] <- "Trade"
+
+# FDI
+fdi <-WDI(indicator="BX.KLT.DINV.WD.GD.ZS", start = 2019, end=2019)
+fdi$ISO3N <- fdi$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
+fdi <- fdi[,c("ISO3N","BX.KLT.DINV.WD.GD.ZS")] %>% drop_na()
+colnames(fdi)[2] <- "Fdi"
+
+
+# distance from US
+unvote <- read_csv("C:/Users/joshu/Desktop/Agreement.csv")
+unvote <- unvote %>% filter(iso3c.x == "USA" & year == 2019)
+unvote$ISO3N <- unvote$iso3c.y %>% countrycode(.,origin = "iso3c", destination = "iso3n")
+unvote <- unvote %>% dplyr::select(ISO3N, IdealPointDistance)
+colnames(unvote)[1] <- "ISO3N"
+
 library(vdemdata)
 vdem.data <- vdem
 vdem.data <- vdem.data %>% filter(year == 2020)
@@ -214,7 +250,7 @@ gov.policy <- read.csv(url("https://github.com/OxCGRT/covid-policy-tracker/raw/m
 
 gov.policy <- gov.policy %>% dplyr::select(CountryCode, Date, H2_Testing.policy)
 
-yesterday <- (Sys.Date() -1) %>% as.character()
+yesterday <- "2020-12-31"
 yesterday <- paste0(substr(yesterday,1,4), substr(yesterday,6,7), substr(yesterday,9,10))
 
 gov.policy$Date <- gov.policy$Date %>% as.character()
@@ -227,12 +263,21 @@ final <- left_join(final, mona.clean.under.year)
 final <- left_join(final, vdem.data)
 final <- left_join(final, oil)
 final <- left_join(final, mona.clean.lastyear)
+final <- left_join(final, mona.clean.lastyear.condition)
 final[is.na(final)] <- 0
 
 final <- left_join(final, dem5.2018)
 final <- left_join(final, urban)
-
+final <- left_join(final, fdi)
+final <- left_join(final, trade)
+final <- left_join(final, unvote)
 final <- final %>% drop_na()
+
+final$lfdi <- log(final$Fdi)
+final$lfdi[final$Fdi < 0] <- -log(final$Fdi %>% abs())
+final$ltrade <-log( final$Trade + 1 )
+
+# write.csv(final, paste0(getwd(), "/final.csv"))
 
   l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
                              `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
@@ -273,11 +318,14 @@ stargazer(l.conditionality.dc, l.total.dc, l.time.dc, type="html", title="Result
 final$imf <- 0
 final$imf[final$time != 0] <- 1
 
+final$ltotalprogram <- log(final$totalprogram + 1)
+
 library(Zelig)
 library(MatchIt)
 
-m.out <- matchit(`imf` ~ `ln.gdp` + `polity`, data = final,
-                  method = "optimal", distance = "glm")
+m.out <- matchit(`program_number` ~ ln.gdp + ltrade + lfdi + polity + `l.oil`
+                 + Asia + Europe + Africa + `North America` + `South America`,
+                  method = "optimal", distance = "glm", data = final)
 summary(m.out)
 
 plot(m.out, type = "jitter", interactive = FALSE)
@@ -287,16 +335,20 @@ plot(m.out, type = "qq", interactive = FALSE,
 
 plot(summary(m.out))
 
-z.out <- zelig(`total_deaths_per_million` ~  `imf` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
-               + Asia + Europe + Africa + `North America` + `South America`,
+z.out <- zelig(`l.total_deaths_per_million` ~  `program_number` + program_number*time + time 
+               + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop`  + `egaldem` + l.population_density,
                model = "ls", data = m.out)
 
-z5_1 <- setx(z.out, `imf` = 0)
-z5_1 <- setx1(z.out, `imf` = 1)
+z.out.save <- z.out
 
-summary(z5_1)
+z.out <- setx(z.out, `program_number` = 0)
+z.out <- setx1(z.out, `program_number` = 1)
 
-z5_1 <- sim(z5_1)
+summary(z.out)
+
+z5_1 <- sim(z.out)
 
 plot(z5_1)
+
+summary(z.out.save)
 
