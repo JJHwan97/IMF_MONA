@@ -6,25 +6,61 @@ url <- "https://www.imf.org/external/np/pdr/mona/ArrangementsData/Combined.xlsx"
 mona <- rio::import(file = url,which = 1) %>% 
   glimpse()
 
-temp2 <- mona$`Country Code` %>% countrycode(., origin = 'imf', destination = 'iso3n')
-temp1 <- mona$`Country Code`
-temp2[temp1 == 965] <- 890
+temp1 <- mona %>% filter(`Review Type` ==  "R10" |`Review Type` == "R11" |`Review Type` == "R11R12" |`Review Type` == "R12" |
+                  `Review Type` == "R13" |`Review Type` == "R9R10")
+temp2 <- mona %>% filter(`Review Type` !=  "R10" &`Review Type`!= "R11" &`Review Type` != "R11R12" &`Review Type` != "R12" &
+                           `Review Type` != "R13" &`Review Type` != "R9R10")
+temp1$reviewnum <- substr(temp1$`Review Type`, nchar(temp1$`Review Type`)-1, nchar(temp1$`Review Type`)) %>% as.numeric()
+temp2$reviewnum <- substr(temp2$`Review Type`, nchar(temp2$`Review Type`), nchar(temp2$`Review Type`)) %>% as.numeric()
 
-mona$`ISO3N` <- temp2
+mona <- rbind(temp1, temp2)
 
-mona.clean <- mona %>% dplyr::select(`Arrangement Number`, ISO3N, `Arrangement Type`, `Economic Code`, `Approval Year`, `Initial End Year`)
+arrangement <- mona[,c("Arrangement Number", "Country Code")] %>% unique()
+
+for ( i in 1 : nrow(arrangements)){
+  if ( i == 1){
+    ar <- arrangement[i,1]
+    co <- arrangement[i,2]
+    temp <- mona %>% filter(`Arrangement Number` == ar & `Country Code` == co)
+    ma <- temp$reviewnum %>% max()
+    temp_max <- temp %>% filter(reviewnum == ma)
+    mona_clean <- temp_max
+  }else{
+    ar <- arrangement[i,1]
+    co <- arrangement[i,2]
+    temp <- mona %>% filter(`Arrangement Number` == ar & `Country Code` == co)
+    ma <- temp$reviewnum %>% max()
+    temp_max <- temp %>% filter(reviewnum == ma)
+    mona_clean <- rbind(mona_clean, temp_max)
+  }
+}
+
+temp2 <- mona_clean$`Country Code` %>% countrycode(., origin = 'imf', destination = 'iso3n')
+temp1 <- mona_clean$`Country Code`
+
+mona_clean$`ISO3N` <- temp2
+
+mona_clean <- mona_clean[(!is.na(mona_clean$`ISO3N`)),]
+
+mona_clean$`Revised End Date` <- mona_clean$`Revised End Date` %>% as.character()
+
+mona_clean$`Revised End Date`[mona_clean$`Revised End Date` %>% is.na()] <- mona_clean$`Initial End Year`[mona_clean$`Revised End Date` %>% is.na()]
+
+mona_clean$`Revised End Date` <- substr(mona_clean$`Revised End Date`, 1, 4) %>% as.numeric()
+
+mona.clean <- mona_clean %>% dplyr::select(`Arrangement Number`, ISO3N, `Arrangement Type`, `Approval Year`, `Revised End Date`)
 
 for (i in 2010:2021){
-  j <- i%>% as.character()
+  j <- i %>% as.character()
   mona.clean$j <- 0
-  mona.clean$j[mona.clean$`Approval Year` <= i & i <= mona.clean$`Initial End Year`] <- 1
+  mona.clean$j[mona.clean$`Approval Year` <= i & i <= mona.clean$`Revised End Date`] <- 1
   colnames(mona.clean)[colnames(mona.clean)%>%length()] <- j
 }
 
 #number of program
 length <- mona.clean %>% colnames() %>% length()
 
-temp <- mona.clean[,7:length]
+temp <- mona.clean[,6:length]
 
 mona.clean$sum <- rowSums(temp) %>% as.data.frame()
 
@@ -33,28 +69,21 @@ mona.clean.10year <- mona.clean %>% filter(sum != 0)
 mona.clean.10year$sum <-1
 
 mona.clean.num.conditionality <- mona.clean.10year %>% 
-                                group_by(ISO3N, `Economic Code`)%>%
-                                summarize(condition_num = sum(sum)) 
-mona.clean.num.conditionality$condition_num <- 1 
-mona.clean.num.conditionality <- mona.clean.num.conditionality%>%
-                                group_by(ISO3N) %>%
-                                summarize(final_sum = sum(condition_num)) %>%
-                                drop_na()
+                                group_by(ISO3N)%>%
+                                summarize(condition_num = sum(sum))
 
 mona.clean.num.programs <- mona.clean.10year %>% 
-  dplyr::select(ISO3N, `Arrangement Number`, `Arrangement Type`, c(2011:2021)%>% as.character()) %>% unique() %>%
-  group_by(ISO3N, `Arrangement Type`, `Arrangement Number`)%>%
-  summarize(count = n()) %>%
-  group_by(ISO3N,`Arrangement Type`)%>%
-  summarize(program_count = n())
+  dplyr::select(ISO3N, `Arrangement Number`) %>% unique() %>%
+  group_by(ISO3N)%>%
+  summarize(count = n())
 
-mona.clean.num.programs <- pivot_wider(mona.clean.num.programs, names_from = `Arrangement Type`, values_from = `program_count`, values_fill =0)
-mona.clean.num.programs$totalprogram <- rowSums(mona.clean.num.programs[,2:length(colnames(mona.clean.num.programs))])
+# mona.clean.num.programs <- pivot_wider(mona.clean.num.programs, names_from = `Arrangement Type`, values_from = `program_count`, values_fill =0)
+# mona.clean.num.programs$totalprogram <- rowSums(mona.clean.num.programs[,2:length(colnames(mona.clean.num.programs))])
 
-mona.clean.num.programs <- mona.clean.num.programs %>% filter(totalprogram != 0) %>% drop_na()
+# mona.clean.num.programs <- mona.clean.num.programs %>% filter(totalprogram != 0) %>% drop_na()
 
 mona.clean.under.year <- mona.clean.10year %>% 
-  dplyr::select(!c(`Arrangement Number`, `Arrangement Type`, `Economic Code`, `Approval Year`, `Initial End Year`,sum)) %>%
+  dplyr::select(!c(`Arrangement Number`, `Arrangement Type`, `Approval Year`, `Revised End Date`,sum)) %>%
   group_by(ISO3N)%>%
   summarise(across(everything(), sum))
 
@@ -85,7 +114,7 @@ mona.clean.lastyear.condition <- mona.clean.10year %>%
   group_by(ISO3N)%>%
   summarize(condition_number = sum(condition_number))
 
-# mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Initial End Year`))
+# mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Revised End Date`))
 # 
 # mona.clean <- mona.clean %>% 
 #   dplyr::select(!c(`sum`)) %>%
@@ -262,8 +291,8 @@ final <- left_join(final, mona.clean.num.programs)
 final <- left_join(final, mona.clean.under.year)
 final <- left_join(final, vdem.data)
 final <- left_join(final, oil)
-final <- left_join(final, mona.clean.lastyear)
-final <- left_join(final, mona.clean.lastyear.condition)
+# final <- left_join(final, mona.clean.lastyear)
+# final <- left_join(final, mona.clean.lastyear.condition)
 final[is.na(final)] <- 0
 
 final <- left_join(final, dem5.2018)
@@ -274,38 +303,40 @@ final <- left_join(final, unvote)
 final <- final %>% drop_na()
 
 final$lfdi <- log(final$Fdi)
-final$lfdi[final$Fdi < 0] <- -log(final$Fdi %>% abs())
+final$lfdi[final$Fdi <= 0] <- -log(final$Fdi[final$Fdi <= 0] %>% abs())
 final$ltrade <-log( final$Trade + 1 )
+
+write.csv(final, paste0(getwd(), "/final.csv"))
 
 # write.csv(final, paste0(getwd(), "/final.csv"))
 
   l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                             `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                             `condition_num` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                              + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   l.program.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                             `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                             `count` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                               + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   l.time.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
                              `time` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                              + Asia + Europe + Africa + `North America` + `South America` + Oceania)
-  l.lastyear <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                                 `final_sum`*program_number + final_sum + `program_number` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
-                               + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+  # l.lastyear <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+  #                                `final_sum`*program_number + final_sum + `program_number` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+  #                              + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   library(stargazer)
   
-  stargazer(l.conditionality.death, l.program.death, l.time.death,l.lastyear,  type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result.htm", align=TRUE)
+  stargazer(l.conditionality.death, l.program.death, l.time.death,  type="html", title="Results", out = "C:/Users/joshu/OneDrive/문서/Git/IMF_MONA/result.htm", align=TRUE)
 
 ###
 
 l.conditionality.dc <- final %>% lm(formula = `deathofcase` ~ 
-                                         `final_sum` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                                         `condition_num` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                                     + Asia + Europe + Africa + `North America` + `South America` + Oceania)
 
 l.total.dc <- final %>% lm(formula = `deathofcase` ~ 
-                                `totalprogram` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                                `count` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
                            + Asia + Europe + Africa + `North America` + `South America` + Oceania)
 
 l.time.dc <- final %>% lm(formula = `deathofcase` ~ 
@@ -335,7 +366,7 @@ plot(m.out, type = "qq", interactive = FALSE,
 
 plot(summary(m.out))
 
-z.out <- zelig(`l.total_deaths_per_million` ~  `program_number` + program_number*time + time 
+z.out <- zelig(`l.total_deaths_per_million` ~  `program_number` + program_number*time + ltotalprogram 
                + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop`  + `egaldem` + l.population_density,
                model = "ls", data = m.out)
 
