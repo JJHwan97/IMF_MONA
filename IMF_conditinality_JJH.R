@@ -17,7 +17,7 @@ mona <- rbind(temp1, temp2)
 
 arrangement <- mona[,c("Arrangement Number", "Country Code")] %>% unique()
 
-for ( i in 1 : nrow(arrangements)){
+for ( i in 1 : nrow(arrangement)){
   if ( i == 1){
     ar <- arrangement[i,1]
     co <- arrangement[i,2]
@@ -48,9 +48,13 @@ mona_clean$`Revised End Date`[mona_clean$`Revised End Date` %>% is.na()] <- mona
 
 mona_clean$`Revised End Date` <- substr(mona_clean$`Revised End Date`, 1, 4) %>% as.numeric()
 
+mona_clean <- mona_clean %>% filter(`Arrangement Type` == "ECF"| `Arrangement Type` == "ECF-EFF"|
+                                      `Arrangement Type` == "EFF"|`Arrangement Type` == "PRGF"|
+                                      `Arrangement Type` == "PRGF-EFF")
+
 mona.clean <- mona_clean %>% dplyr::select(`Arrangement Number`, ISO3N, `Arrangement Type`, `Approval Year`, `Revised End Date`)
 
-for (i in 2010:2021){
+for (i in 2000:2020){
   j <- i %>% as.character()
   mona.clean$j <- 0
   mona.clean$j[mona.clean$`Approval Year` <= i & i <= mona.clean$`Revised End Date`] <- 1
@@ -94,25 +98,25 @@ time <- rowSums(time)
 mona.clean.under.year <- cbind(mona.clean.under.year$ISO3N,time) %>% as.data.frame()
 colnames(mona.clean.under.year)[1]<-"ISO3N"
 
-mona.clean.lastyear <- mona.clean.10year %>%
-  filter(`2020` == 1) %>%
-  dplyr::select(`Arrangement Number`, `ISO3N`, `Arrangement Type`, `2020`)%>%
-  unique() %>% 
-  group_by(ISO3N, `Arrangement Type`) %>%
-  summarize(program_number = n())
-
-mona.clean.lastyear <-mona.clean.lastyear %>% filter(`Arrangement Type` != "PCI")
-
-mona.clean.lastyear[,3] <- 1
-mona.clean.lastyear <- mona.clean.lastyear[,c(1,3)]
-
-mona.clean.lastyear.condition <- mona.clean.10year %>%
-  filter(`2020` == 1) %>%
-  dplyr::select(`Arrangement Number`, `ISO3N`, `Economic Code`,`2020`)%>%
-  group_by(ISO3N, `Arrangement Number`,`Economic Code`) %>%
-  summarize(condition_number = n()) %>%
-  group_by(ISO3N)%>%
-  summarize(condition_number = sum(condition_number))
+# mona.clean.lastyear <- mona.clean.10year %>%
+#   filter(`2020` == 1) %>%
+#   dplyr::select(`Arrangement Number`, `ISO3N`, `Arrangement Type`, `2020`)%>%
+#   unique() %>% 
+#   group_by(ISO3N, `Arrangement Type`) %>%
+#   summarize(program_number = n())
+# 
+# mona.clean.lastyear <-mona.clean.lastyear %>% filter(`Arrangement Type` != "PCI")
+# 
+# mona.clean.lastyear[,3] <- 1
+# mona.clean.lastyear <- mona.clean.lastyear[,c(1,3)]
+# 
+# mona.clean.lastyear.condition <- mona.clean.10year %>%
+#   filter(`2020` == 1) %>%
+#   dplyr::select(`Arrangement Number`, `ISO3N`, `Economic Code`,`2020`)%>%
+#   group_by(ISO3N, `Arrangement Number`,`Economic Code`) %>%
+#   summarize(condition_number = n()) %>%
+#   group_by(ISO3N)%>%
+#   summarize(condition_number = sum(condition_number))
 
 # mona.clean <- mona.clean %>% dplyr::select(!c(`Approval Year`, `Revised End Date`))
 # 
@@ -255,13 +259,22 @@ fdi$ISO3N <- fdi$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n"
 fdi <- fdi[,c("ISO3N","BX.KLT.DINV.WD.GD.ZS")] %>% drop_na()
 colnames(fdi)[2] <- "Fdi"
 
+# wdi_temp <- WDI(indicator= c("sp.urb.totl.in.zs","NY.GDP.PETR.RT.ZS", 
+#                              "NE.TRD.GNFS.ZS", "BX.KLT.DINV.WD.GD.ZS", start = 2020, end=2020))
+# 
+# wdi_temp <- as.data.frame(wdi_temp)
+# 
+# colnames(wdi_temp)[4:7] <- c("urban_pop","l.oil","Trade","Fdi")
+# 
+# wdi_temp$ISO3N <- wdi_temp$iso2c %>% countrycode(.,origin = "iso2c", destination = "iso3n")
 
-# distance from US
-unvote <- read_csv("C:/Users/joshu/Desktop/Agreement.csv")
-unvote <- unvote %>% filter(iso3c.x == "USA" & year == 2019)
-unvote$ISO3N <- unvote$iso3c.y %>% countrycode(.,origin = "iso3c", destination = "iso3n")
-unvote <- unvote %>% dplyr::select(ISO3N, IdealPointDistance)
-colnames(unvote)[1] <- "ISO3N"
+# 
+# # distance from US
+# unvote <- read_csv("C:/Users/joshu/Desktop/Agreement.csv")
+# unvote <- unvote %>% filter(iso3c.x == "USA" & year == 2019)
+# unvote$ISO3N <- unvote$iso3c.y %>% countrycode(.,origin = "iso3c", destination = "iso3n")
+# unvote <- unvote %>% dplyr::select(ISO3N, IdealPointDistance)
+# colnames(unvote)[1] <- "ISO3N"
 
 library(vdemdata)
 vdem.data <- vdem
@@ -279,11 +292,35 @@ gov.policy <- read.csv(url("https://github.com/OxCGRT/covid-policy-tracker/raw/m
 
 gov.policy <- gov.policy %>% dplyr::select(CountryCode, Date, H2_Testing.policy)
 
-yesterday <- "2020-12-31"
+yesterday <- Sys.Date() -1
 yesterday <- paste0(substr(yesterday,1,4), substr(yesterday,6,7), substr(yesterday,9,10))
 
 gov.policy$Date <- gov.policy$Date %>% as.character()
 gov.policy <- gov.policy %>% filter(Date == yesterday)
+
+
+border <- read.csv("E:/datafile/country-borders-master/GEODATASOURCE-COUNTRY-BORDERS.CSV")
+colnames(border)[1] <- "main"
+colnames(border)[3] <- "ISO2C"
+border$ISO3N <- border$ISO2C %>% countrycode(., origin = 'iso2c', destination = 'iso3n')
+
+border1 <- left_join(border , covid19.foriegn.death)
+border1 <- border1 %>% dplyr::select(main, ISO3N, total_deaths_per_million)
+border1$mainISO3N <- border1$main %>% countrycode(., origin = 'iso2c', destination = 'iso3n')
+border2 <- border1 %>% group_by(mainISO3N) %>% summarize(sum = sum (total_deaths_per_million, na.rm = TRUE))
+border2$num <- border1 %>% group_by(mainISO3N) %>% summarize(num = n())
+border2 <- border2 %>% as.matrix() %>% as.data.frame() %>% .[,c(1,2,4)]
+colnames(border2)[3] = "num"
+border2$av <- border2[,2]/border2[,3]
+border2$lav <- log(border2$av +1)
+colnames(border2)[1] <- "ISO3N"
+
+agree <- read.csv("E:/datafile/Agreement.csv")
+agree1 <- agree %>% filter(year > 1999 & ccode1 == 2) %>% dplyr::select(year, iso3c.x, iso3c.y, IdealPointDistance)
+agree1$ISO3N <- agree1$iso3c.y %>% countrycode(., origin = "iso3c", destination = "iso3n")
+agree2 <- agree1 %>% group_by(ISO3N) %>% summarize(mean = mean(IdealPointDistance)) %>% drop_na()
+temp <- c(840, 0)
+unvote <- rbind(agree2, temp)
 
 covid19.foriegn.death <- drop_na(covid19.foriegn.death)
 final <- left_join(covid19.foriegn.death, mona.clean.num.conditionality)
@@ -296,23 +333,51 @@ final <- left_join(final, oil)
 final[is.na(final)] <- 0
 
 final <- left_join(final, dem5.2018)
-final <- left_join(final, urban)
 final <- left_join(final, fdi)
-final <- left_join(final, trade)
 final <- left_join(final, unvote)
+final <- left_join(final, border2)
+final <- left_join(final, urban)
 final <- final %>% drop_na()
 
 final$lfdi <- log(final$Fdi)
 final$lfdi[final$Fdi <= 0] <- -log(final$Fdi[final$Fdi <= 0] %>% abs())
-final$ltrade <-log( final$Trade + 1 )
-
-write.csv(final, paste0(getwd(), "/final.csv"))
+final$ltrade <- log( final$Trade + 1 )
+final$mean2 <- final$mean * final$mean
 
 # write.csv(final, paste0(getwd(), "/final.csv"))
 
-  l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
-                             `condition_num` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
-                             + Asia + Europe + Africa + `North America` + `South America` + Oceania)
+# write.csv(final, paste0(getwd(), "/final.csv"))
+l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+                                      `condition_num` 
+                                      + mean + mean2 
+                                      + `ln.gdp` + `aged_65_older` + `polity` + `urban_pop` 
+                                      + num + lav + num * lav)
+summary(l.conditionality.death)
+
+l.conditionality.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
+                                        `condition_num`
+                                        + mean + mean2 + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` 
+                                         + `l.oil` + `egaldem` + l.population_density)
+summary(l.conditionality.death)
+
+l.conditionality.death <- final %>%lm(formula = `deathofcase` ~ 
+                                        `condition_num`+`count` + `condition_num`*`count` + time + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density)
+summary(l.conditionality.death)
+
+l.conditionality.death <- final %>%lm(formula = `deathofcase` ~ 
+                                        `condition_num`+`count` + `condition_num`*`count` + time + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` 
+                                      + `l.oil` + `egaldem` + l.population_density + mean + mean2)
+summary(l.conditionality.death)
+
+l.conditionality.death <- final %>%lm(formula = `deathofcase` ~ 
+                                        `condition_num`+`count` + `condition_num`*`count` + time 
+                                      +num + lav + num * lav)
+summary(l.conditionality.death)
+
+
+  l.conditionality.death <- final %>%lm(formula = `l.total_deaths_per_million` ~ 
+                             `condition_num`+`count` + `condition_num`*`count` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
+                             + num + lav + num * lav + Asia + Europe + Africa + `North America` + `South America` + Oceania)
   
   l.program.death <- final %>% lm(formula = `l.total_deaths_per_million` ~ 
                              `count` + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` + `l.oil` + `egaldem` + l.population_density
@@ -354,8 +419,8 @@ final$ltotalprogram <- log(final$totalprogram + 1)
 library(Zelig)
 library(MatchIt)
 
-m.out <- matchit(`program_number` ~ ln.gdp + ltrade + lfdi + polity + `l.oil`
-                 + Asia + Europe + Africa + `North America` + `South America`,
+m.out <- matchit(`program_number` ~ + `aged_65_older` + `ln.gdp` + `polity` + `urban_pop` 
+                 + `l.oil` + `egaldem` + l.population_density + num + lav + num * lav,
                   method = "optimal", distance = "glm", data = final)
 summary(m.out)
 
